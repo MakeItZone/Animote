@@ -1,0 +1,3 @@
+# keep passwords secret...
+# initial checkin has place holder values added to git, then file is added .gitignore
+secrets.h
