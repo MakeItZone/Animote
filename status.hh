@@ -5,4 +5,4 @@ enum class Status { boot, disconnected, running };
 
 void updateStatus(Status status);
 
-***REMOVED***
+#endif

@@ -4,7 +4,7 @@
 
 #include "network.hh"
 #include "status.hh"
-#include "animation.hh"
+#include "animation_manager.hh"
 #include "secrets.h"
 
 using namespace std;
@@ -37,7 +37,14 @@ uint32_t myMqttCallback(vector<string> vs)
     Serial.printf("USER: Msg received with %d parts and payload=%s\n", vs.size(), H4PAYLOAD.c_str()); // convert payload to C-style string
     dumpvs(vs);
 
-    if (vs.size() == 4) // topic parts below the subscription + payload
+    if (vs.size() == 2) {
+        if (vs[0]=="speed") {
+            updateAnimationTimebase(PARAM_INT(1));
+            return H4_CMD_OK;
+        }
+        return H4_CMD_PAYLOAD_FORMAT;
+    }
+    else if (vs.size() == 4) // topic parts below the subscription + payload
     {
             int figure = PARAM_INT(0);
             string category = vs[1];
@@ -47,16 +54,24 @@ uint32_t myMqttCallback(vector<string> vs)
                 if (item == "eye")
                 {
                     // update eye animation flags
-                    updateEyeAnimation(figure, H4PAYLOAD);
-
-                    return H4_CMD_OK;
+                    int ret = updateEyeAnimation(figure, H4PAYLOAD);
+                    if (ret >= 0) {
+                        return H4_CMD_OK;
+                    } else {
+                        Serial.println("Bad payload!");
+                        return H4_CMD_PAYLOAD_FORMAT;
+                    }
                 }
                 else if (item == "matrix")
                 {
                     // update matrix animation flags
-                    updateMatrixAnimation(figure, H4PAYLOAD);
-
-                    return H4_CMD_OK;
+                    int ret = updateMatrixAnimation(figure, H4PAYLOAD);
+                    if (ret >= 0) {
+                        return H4_CMD_OK;
+                    } else {
+                        Serial.println("Bad payload!");
+                        return H4_CMD_PAYLOAD_FORMAT;
+                    }
                 }
             }
     }
@@ -71,6 +86,8 @@ void onMqttConnect()
     // desired topics are:
     // <device>/figure/<number>/animation/eye
     // <device>/figure/<number>/animation/matrix
+    h4mqtt.subscribeDevice("animation", myMqttCallback);
+    h4mqtt.subscribeDevice("animation/speed", myMqttCallback);
     h4mqtt.subscribeDevice("figure/#", myMqttCallback);
     updateAnimationMQTT();
 }
@@ -78,6 +95,8 @@ void onMqttConnect()
 void onMqttDisconnect()
 {
     Serial.print("USER: MQTT disconnected\n");
+    h4mqtt.unsubscribeDevice("animation/speed");
+    h4mqtt.unsubscribeDevice("animation");
     h4mqtt.unsubscribeDevice("figure/#");
 }
 

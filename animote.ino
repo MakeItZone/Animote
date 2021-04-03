@@ -1,7 +1,7 @@
 #include <H4Plugins.h>
 
 #include "network.hh"
-#include "animation.hh"
+#include "animation_manager.hh"
 #include "time.hh"
 #include "status.hh"
 #include "secrets.h"

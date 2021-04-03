@@ -9,4 +9,4 @@ void onWiFiDisconnect(void);
 void onMqttConnect(void);
 void onMqttDisconnect(void);
 void mqttPublish(string topic, string payload );
-***REMOVED***
+#endif

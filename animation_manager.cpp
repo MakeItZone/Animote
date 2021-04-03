@@ -1,25 +1,34 @@
+#include <map>
+#include <memory>
+#include <H4.h>
 #include <NeoPixelBus.h>
-#include <NeoPixelAnimator.h>
-#include "animation.hh"
+#include "animation_manager.hh"
+#include  "animations.hh"
 #include "network.hh"
 
 using namespace std;
 
+extern std::map<MatrixAnimations, const char*> MatrixAnimationNames;
+extern std::map<EyeAnimations, const char*> EyeAnimationNames;
+
+
 const uint16_t PixelCount = 51; 
 const uint8_t PixelPin = 3;  // make sure to set this to the correct pin, ignored for Esp8266 (setting it for clarity)
-
-std::map<MatrixAnimations, const char*> MatrixAnimationNames;
-std::map<EyeAnimations, const char*> EyeAnimationNames;
 
 // Note: for Esp8266, the Pin is omitted and it uses GPIO3 due to DMA hardware use.  
 //NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> strip(PixelCount, PixelPin);
 NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> strip(PixelCount);
-NeoPixelAnimator neoAnimator(NUMBER_OF_FIGURES * 2 + 1);
+NeoPixelAnimator neoAnimator(NUMBER_OF_FIGURES * 2 + 1, NEO_MILLISECONDS); // twice as many figures - figures + eyes
+NeoGamma<NeoGammaTableMethod> colorGamma;
+H4_TIMER animationTimer;
 
 #define colorSaturation 128
 
-MatrixAnimations matrices[NUMBER_OF_FIGURES];
-EyeAnimations eyes[NUMBER_OF_FIGURES];
+// keep track of the animiation name and current fucntion implementing it.
+// unique_ptr has the nice property that it frees what it's pointing to when a new thing is assigned to it.
+// This meams we don't have to track and manage memory.
+MatrixAnimationChannelControllerDescriptor matrices[NUMBER_OF_FIGURES];
+EyeAnimationChannelControllerDescriptor eyes[NUMBER_OF_FIGURES];
 
 void updateMatrixMQTT(int figure){
     // <device>/figure/<number>/animation/matrix
@@ -29,7 +38,7 @@ void updateMatrixMQTT(int figure){
     topic += buf;
     topic += "/animation/matrix";
 
-    string payload = MatrixAnimationNames[matrices[figure]];
+    string payload = MatrixAnimationNames[matrices[figure].first];
 
     mqttPublish(topic, payload);
 }
@@ -42,20 +51,30 @@ void updateEyeMQTT(int figure) {
     topic += buf;
     topic += "/animation/eye";
 
-    string payload = EyeAnimationNames[eyes[figure]];
+    string payload = EyeAnimationNames[eyes[figure].first];
 
     mqttPublish(topic, payload);
 }
 
-void updateMatrixAnimation(int figure, string animation){
-    if (figure > NUMBER_OF_FIGURES) {
+void updateAnimationTimebaseMQTT(uint16_t speed) {
+    // <device>/animation/speed
+    char buf[6];
+    string topic = string("status/animation/speed");
+    snprintf(buf, 6, "%d", speed);
+    mqttPublish(topic, buf);
+
+}
+
+int updateMatrixAnimation(int figure, string animation){
+    if ((figure<0) || (figure > NUMBER_OF_FIGURES)) {
         Serial.printf("USER: update matrix animation - figure out of range: %d\n", figure);
-        return;
+        return -1;
     }
     bool found = false;
     for ( const auto &i : MatrixAnimationNames ) {
         if (i.second == animation) {
-            matrices[figure] = i.first;
+            matrices[figure].first = i.first;
+            // !!TODO!! update the function
             updateMatrixMQTT(figure);
             found = true;
             break;
@@ -63,18 +82,20 @@ void updateMatrixAnimation(int figure, string animation){
     }
     if (!found) { 
         Serial.printf("USER: invalid matrix animation name %s\n", animation.c_str());
+        return -1;
     }
+    return 0;
 }
 
-void updateEyeAnimation(int figure, string animation){
-    if (figure > NUMBER_OF_FIGURES) {
+int updateEyeAnimation(int figure, string animation){
+    if ((figure < 0 ) || (figure > NUMBER_OF_FIGURES)) {
         Serial.printf("USER: update eye animation - figure out of range: %d\n", figure);
-        return;
+        return -1;
     }
     bool found = false;
     for ( const auto &i : EyeAnimationNames ) {
         if (i.second == animation) {
-            eyes[figure] = i.first;
+            eyes[figure].first = i.first;
             updateEyeMQTT(figure);
             found = true;
             break;
@@ -82,7 +103,15 @@ void updateEyeAnimation(int figure, string animation){
     }
     if (!found) { 
         Serial.printf("USER: invalid eye animation name %s\n", animation.c_str());
+        return -1;
     }
+    return 0;
+}
+
+void updateAnimationTimebase(uint16_t timebasems) {
+    neoAnimator.setTimeScale(timebasems);
+    Serial.printf("USER: animation speed: %d\n", timebasems);
+    updateAnimationTimebaseMQTT(neoAnimator.getTimeScale());
 }
 
 void updateAnimationMQTT() {
@@ -90,17 +119,11 @@ void updateAnimationMQTT() {
         updateMatrixMQTT(i);
         updateEyeMQTT(i);
     }
+    updateAnimationTimebaseMQTT(neoAnimator.getTimeScale());
 }
 
 void animationSetup() {
-    MatrixAnimationNames[MatrixAnimations::breathe] = "breath";
-    MatrixAnimationNames[MatrixAnimations::blink] = "blink";
-    MatrixAnimationNames[MatrixAnimations::swirl] = "swirl";
-
-    EyeAnimationNames[EyeAnimations::breathe] = "breath";
-    EyeAnimationNames[EyeAnimations::blink] = "blink";
-    EyeAnimationNames[EyeAnimations::angry] = "angry";
-
+    CreateListOfAnimations();
     RgbColor red(colorSaturation, 0, 0);
     RgbColor green(0, colorSaturation, 0);
     RgbColor blue(0, 0, colorSaturation);
