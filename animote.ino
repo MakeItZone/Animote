@@ -1,3 +1,4 @@
+// ONLY INCLUDE H4Plugins.h in the main .ino file! (You'll get linker errors.)
 #include <H4Plugins.h>
 
 #include "network.hh"
@@ -13,7 +14,7 @@
 // for why this 'extern' is still a declaration and is valid
 extern int const APP_STATUS_LED_PIN = 16;
 
-// ESP8266 Flash button on GPIO0 
+// ESP8266 Flash button on GPIO0 - used to do a full reset
 const int BUTTON_PIN = 0;
 
 // Setup H4
@@ -22,7 +23,8 @@ H4P_VerboseMessages h4vm; // enable text messages instead of error coders
 H4P_WiFi h4wifi(SSID,SSIDPSK,"", onWiFiConnect, onWiFiDisconnect);
 H4P_AsyncMQTT h4mqtt(MQTTSERVER,1883,"","",onMqttConnect,onMqttDisconnect);
 H4P_FlasherController h4fc; // for app status
-H4P_MultiFunctionButton mfnb(BUTTON_PIN, INPUT_PULLUP, ACTIVE_LOW, 15); // pin, mode, sense, debounce (ms)
+// short press -> slow blinking -> reset; long press -> fast blinking -> factory (firmware) reset
+H4P_MultiFunctionButton mfnb(BUTTON_PIN, INPUT, ACTIVE_LOW, 15); // pin, mode, sense, debounce (ms)
 H4P_Heartbeat h4hb; // add up-time to web ui
 // see https://github.com/philbowles/h4plugins/blob/master/dead/h4tk.md
 // note: the DST adjustment seems to not be correct/working
@@ -45,7 +47,9 @@ H4P_Timekeeper h4tk("time.google.com","time1.google.com", -8*60, &H4P_Timekeeper
 // and  MQTT log destination: https://github.com/philbowles/h4plugins/blob/master/docs/mlog.md
 
 
-void h4setup(){ // do the same type of thing as the standard setup
+void h4setup(){ 
+    // Note: H4 constructor starts Serial
+
     pinMode(APP_STATUS_LED_PIN, OUTPUT);
     updateStatus(Status::boot);
     Serial.printf("USER: Attempting to connect to AP: %s\n", SSID.c_str());

@@ -2,32 +2,31 @@
 #define animations_h
 #include <memory>
 #include <NeoPixelBus.h>
-#include "animation_manager.hh"
+#include "shared_animation_types.hh"
 
 using namespace std; 
 
-
-
-enum class MatrixAnimations { blank, breathe, blink, swirl, First=blank, Last=swirl };
-enum class EyeAnimations { blank, breathe, blink, angry, First=blank, Last=angry };
+// error is a flag, not an animation name!
+enum class MatrixAnimationIDs { error=-1, blank, breathe, First=undefined, Last=breathe };
+enum class EyeAnimationIDs { error=-1, blank, breathe, First=undefined, Last=breathe };
 
 struct MatrixAnimationChannelControllerDescriptor {
-    MatrixAnimations animationName;
-    u_int period;
+    MatrixAnimationIDs animation;
+    uint16_t duration;
     std::unique_ptr<AnimationFunction_t> controller;
 };
 
 struct EyeAnimationChannelControllerDescriptor {
-    EyeAnimations animationName;
-    u_int period;
+    EyeAnimationIDs animation;
+    uint16_t duration;
     std::unique_ptr<AnimationFunction_t> controller;
 };
 
+MatrixAnimationIDs findAnimationID(string name);
+void createMatrixAnimation(MatrixAnimationIDs id, int startLED, int numLEDs, MatrixAnimationChannelControllerDescriptor &matrix);
 
-
-void CreateListOfAnimations( void );
-
-std::unique_ptr<AnimationFunction_t> solidColorMatrix(HslColor colour);
-std::unique_ptr<AnimationFunction_t> solidColorEye(HslColor colour);
+// animations
+std::unique_ptr<AnimationFunction_t> solidColorMatrix(HslColor colour, int startLED, int numLEDs);
+std::unique_ptr<AnimationFunction_t> solidColorEye(HslColor colour, int startLED, int numLEDs);
 
 #endif

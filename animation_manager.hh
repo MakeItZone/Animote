@@ -1,6 +1,7 @@
 #ifndef animation_manager_h
 #define animation_manager_h
 #include <NeoPixelAnimator.h>
+#include "animations.hh"
 
 using namespace std;
 

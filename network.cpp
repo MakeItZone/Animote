@@ -1,4 +1,3 @@
-// ONLY INCLUDE H4Plugins.h in the main .ino file! (You'll get linker errors.)
 #include <H4P_WiFi.h>
 #include <H4P_AsyncMQTT.h>
 
