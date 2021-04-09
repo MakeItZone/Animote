@@ -34,7 +34,6 @@ void onWiFiDisconnect(void)
 uint32_t myMqttCallback(vector<string> vs)
 {
     Serial.printf("USER: Msg received with %d parts and payload=%s\n", vs.size(), H4PAYLOAD.c_str()); // convert payload to C-style string
-    dumpvs(vs);
 
     if (vs.size() == 2) {
         if (vs[0]=="speed") {

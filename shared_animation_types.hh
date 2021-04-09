@@ -5,6 +5,6 @@
 
 using namespace std;
 
-typedef std::function<void (AnimationParam param)> AnimationFunction_t;
+typedef std::function<void (const AnimationParam& param)> AnimationFunction_t;
 
 #endif

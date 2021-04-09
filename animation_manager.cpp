@@ -14,24 +14,27 @@ const uint8_t PixelPin = 3;  // make sure to set this to the correct pin, ignore
 // Note: for Esp8266, the Pin is omitted and it uses GPIO3 due to DMA hardware use.  
 //NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> strip(PixelCount, PixelPin);
 NeoPixelBus<NeoGrbFeature, Neo800KbpsMethod> strip(PixelCount);
-NeoPixelAnimator neoAnimator(NUMBER_OF_FIGURES * 2 + 1, NEO_DECISECONDS); // twice as many figures - figures + eyes
+NeoPixelAnimator neoAnimator(NUMBER_OF_FIGURES * 2 + 1, NEO_CENTISECONDS); // twice as many figures - figures + eyes
 NeoGamma<NeoGammaTableMethod> colorGamma;
-H4_TIMER animationTimer;
 
-#define colorSaturation 128
-
-// keep track of the animiation name and current fucntion implementing it.
+// keep track of the animiation name and current function implementing it.
 // unique_ptr has the nice property that it frees what it's pointing to when a new thing is assigned to it.
 // This meams we don't have to track and manage memory.
-MatrixAnimationChannelControllerDescriptor matrices[NUMBER_OF_FIGURES];
-EyeAnimationChannelControllerDescriptor eyes[NUMBER_OF_FIGURES];
+AnimationChannelControllerDescriptor matrices[NUMBER_OF_FIGURES];
+AnimationChannelControllerDescriptor eyes[NUMBER_OF_FIGURES];
+
+void updateAndShowAnimitions() {
+    neoAnimator.UpdateAnimations();
+    strip.Show();
+}
+
 
 int matrixAnimationChannel(int figure){
     return figure * 2 + 1; // + 1 to skip status LED
 }
 
-int eyeAnimationChannel(int figure){
-    return figure * 2 + 2; // + 1 to skip status LED
+int eyeAnimationChannel(int eye){
+    return eye * 2 + 2; // + 1 to skip status LED
 }
 
 int figureStartLED(int figure) {
@@ -42,24 +45,28 @@ int eyeStartLED(int figure) {
     return figure * 10 + 10; // 9 for the matrix + 1 for status/safety LED
 }
 
-void updateMatrixMQTT(int figure, string payload){
+void updateMatrixMQTT(int figure){
     // <device>/figure/<number>/animation/matrix
-    char buf[3]; // max two digits
-    string topic = string("status/figure/");
-    snprintf(buf, 3, "%d", figure);
-    topic += buf;
-    topic += "/animation/matrix";
-    mqttPublish(topic, payload);
+    if(matrices[figure].animationName) {
+        char buf[3]; // max two digits
+        string topic = string("status/figure/");
+        snprintf(buf, 3, "%d", figure);
+        topic += buf;
+        topic += "/animation/matrix";
+        mqttPublish(topic, *matrices[figure].animationName.get());
+    }
 }
 
-void updateEyeMQTT(int figure, string payload) {
+void updateEyeMQTT(int eye) {
     // <device>/figure/<number>/animation/eye
-    char buf[3]; // max two digits
-    string topic = string("status/figure/");
-    snprintf(buf, 3, "%d", figure);
-    topic += buf;
-    topic += "/animation/eye";
-    mqttPublish(topic, payload);
+    if(eyes[eye].animationName) {
+        char buf[3]; // max two digits
+        string topic = string("status/figure/");
+        snprintf(buf, 3, "%d", eye);
+        topic += buf;
+        topic += "/animation/eye";
+        mqttPublish(topic, *eyes[eye].animationName.get());
+    }
 }
 
 void updateAnimationTimebaseMQTT(uint16_t speed) {
@@ -70,50 +77,67 @@ void updateAnimationTimebaseMQTT(uint16_t speed) {
     mqttPublish(topic, buf);
 }
 
-int updateMatrixAnimation(int figure, string animation){
+int updateMatrixAnimation(int figure, const string &animationName){
     if ((figure<0) || (figure > NUMBER_OF_FIGURES)) {
         Serial.printf("USER: update matrix animation - figure out of range: %d\n", figure);
         return -1;
     }
 
-    const MatrixAnimationIDs id = findAnimationID(animation);
-    if (id == MatrixAnimationIDs::error) { 
-        Serial.printf("USER: invalid matrix animation name %s\n", animation.c_str());
+    // don't update if we're already running this animation
+    if(matrices[figure].animationName) { // only compare if it's been set! 
+        if ( animationName == *matrices[figure].animationName.get()) {
+            return 0;
+        }
+    } 
+
+    AnimationChannelControllerDescriptor tempDescriptor;
+
+    int result = createMatrixAnimation(animationName, figureStartLED(figure), 9,  tempDescriptor);
+    if (-1 == result) {
         return -1;
     }
-
-    // don't re-create & re-start the animation if it's the same as running animation
-    if (id == matrices[figure].animation) {
-        return 0;
-    }
-
-    // stop the channel animation so there's no chance of it being called while we're changing callbacks
+    // if we get this far, we've created the new animation to run for the given figure
     int channel = matrixAnimationChannel(figure);
     neoAnimator.StopAnimation(channel);
+    matrices[figure].animationName = std::move(tempDescriptor.animationName);
+    matrices[figure].duration = tempDescriptor.duration;
+    matrices[figure].controller = std::move(tempDescriptor.controller);
 
-    createMatrixAnimation(id, figureStartLED(figure), 9,  &matrices[figure]);
-    neoAnimator.StartAnimation(channel, matrices[figure].duration, matrices[figure].controller);
+    neoAnimator.StartAnimation(channel, matrices[figure].duration, *matrices[figure].controller.get());
+
+    updateMatrixMQTT(figure);
     return 0;
 }
 
-int updateEyeAnimation(int figure, string animation){
-    if ((figure < 0 ) || (figure > NUMBER_OF_FIGURES)) {
-        Serial.printf("USER: update eye animation - figure out of range: %d\n", figure);
+int updateEyeAnimation(int eye, const string &animationName){
+    if ((eye<0) || (eye > NUMBER_OF_FIGURES)) {
+        Serial.printf("USER: update eye animation - eye out of range: %d\n", eye);
         return -1;
     }
-    bool found = false;
-    for ( const auto &i : EyeAnimationNames ) {
-        if (i.second == animation) {
-            eyes[figure].first = i.first;
-            updateEyeMQTT(figure);
-            found = true;
-            break;
+
+    // don't update if we're already running this animation
+    if(eyes[eye].animationName) {
+        if ( animationName == *eyes[eye].animationName.get()) {
+            return 0;
         }
     }
-    if (!found) { 
-        Serial.printf("USER: invalid eye animation name %s\n", animation.c_str());
+
+    AnimationChannelControllerDescriptor tempDescriptor;
+
+    int result = createEyeAnimation(animationName, eyeStartLED(eye), 1,  tempDescriptor);
+    if (-1 == result) {
         return -1;
     }
+    // if we get this far, we've created the new animation to run for the given figure
+    int channel = eyeAnimationChannel(eye);
+    neoAnimator.StopAnimation(channel);
+    eyes[eye].animationName = std::move(tempDescriptor.animationName);
+    eyes[eye].duration = tempDescriptor.duration;
+    eyes[eye].controller = std::move(tempDescriptor.controller);
+
+    neoAnimator.StartAnimation(channel, eyes[eye].duration, *eyes[eye].controller.get());
+
+    updateEyeMQTT(eye);
     return 0;
 }
 
@@ -132,23 +156,15 @@ void updateAnimationMQTT() {
 }
 
 void animationSetup() {
-    CreateListOfAnimations();
-    RgbColor red(colorSaturation, 0, 0);
-    RgbColor green(0, colorSaturation, 0);
-    RgbColor blue(0, 0, colorSaturation);
-    RgbColor white(colorSaturation);
-    RgbColor black(0);
-
-    HslColor hslRed(red);
-    HslColor hslGreen(green);
-    HslColor hslBlue(blue);
-    HslColor hslWhite(white);
-    HslColor hslBlack(black);
-
+    for (int i =0; i < NUMBER_OF_FIGURES; i++) {
+        const string blankName("blank");
+        updateMatrixAnimation(i, blankName);
+        updateEyeAnimation(i, blankName);
+    }
+    // calling updateAnimationMQTT() would be a redundant update to the figures & eyes - they're done in the loop above
+    updateAnimationTimebaseMQTT(neoAnimator.getTimeScale());
+    neoAnimator.StartAnimation(0, 5000, statusAnimation);    
     strip.Begin();
-    strip.SetPixelColor(0, hslRed);
-    strip.SetPixelColor(1, hslGreen);
-    strip.SetPixelColor(2, hslBlue);
-    strip.SetPixelColor(3, hslWhite);
     strip.Show();
+    h4.every(10, updateAndShowAnimitions);
 }
