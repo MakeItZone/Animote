@@ -5,11 +5,11 @@
 
 using namespace std;
 
-const int NUMBER_OF_FIGURES = 5;
+const int NUMBER_OF_FIGURES = 1;
+const int LEDS_PER_FIGURE = 15;
 
 void animationSetup();
 int updateMatrixAnimation(int figure, const string &animation);
-int updateEyeAnimation(int figure, const string &animation);
 void updateAnimationTimebase(uint16_t timebasems);
 void updateAnimationMQTT();
 

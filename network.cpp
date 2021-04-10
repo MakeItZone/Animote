@@ -49,18 +49,7 @@ uint32_t myMqttCallback(vector<string> vs)
             if (category == "animation")
             {
                 string item = vs[2];
-                if (item == "eye")
-                {
-                    // update eye animation flags
-                    int ret = updateEyeAnimation(figure, H4PAYLOAD);
-                    if (ret >= 0) {
-                        return H4_CMD_OK;
-                    } else {
-                        Serial.println("Bad payload!");
-                        return H4_CMD_PAYLOAD_FORMAT;
-                    }
-                }
-                else if (item == "matrix")
+                if (item == "matrix")
                 {
                     // update matrix animation flags
                     int ret = updateMatrixAnimation(figure, H4PAYLOAD);

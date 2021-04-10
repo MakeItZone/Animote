@@ -91,10 +91,8 @@ struct AnimationChannelControllerDescriptor {
 };
 
 int createMatrixAnimation(const string &animationName, const int startLED, const int numLEDs, AnimationChannelControllerDescriptor &matrix);
-int createEyeAnimation(const string &animationName, const int startLED, const int numLEDs, AnimationChannelControllerDescriptor &eye);
 
 // animations
 void statusAnimation(const AnimationParam& param);
-std::unique_ptr<AnimationFunction_t> solidColourAnimationFactory(const HslColor &colour, const int startLED, const int numLEDs);
 
 #endif

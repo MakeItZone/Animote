@@ -382,11 +382,3 @@ int createMatrixAnimation(const string &animationName, const int startLED, const
     // but probably most eye animations can be single pixel versions of the matrix animations
     return createAnimation(animationName, startLED, numLEDs, matrix);
 }
-
-int createEyeAnimation(const string &animationName, int startLED, int numLEDs, AnimationChannelControllerDescriptor &eye) {
-    // add handling for any eye-specific implementations
-    // but probably most eye animations can be single pixel versions of the matrix animations
-    return createAnimation(animationName, startLED, numLEDs, eye);
-}
-
-
