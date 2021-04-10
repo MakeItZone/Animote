@@ -166,11 +166,11 @@ std::unique_ptr<AnimationFunction_t> solidFadeAnimationFactory(const HslColor &c
         {
             float lum;
             if (param.progress <= (0.5 - halfHoldTime)) {
-                lum = easingFn(param.progress /(0.5 - halfHoldTime));
+                lum = easingFn(param.progress /(0.5 - halfHoldTime)) * 0.45f;
             } else if (param.progress <= (0.5 + halfHoldTime)) {
-                lum = 1.0f;
+                lum = 0.45f;
             } else {
-                lum = easingFn((1.0f-param.progress)/(0.5 - halfHoldTime)); 
+                lum = easingFn((1.0f-param.progress)/(0.5 - halfHoldTime)) * 0.45f; 
             }
             auto updateColour = HslColor(colour.H, colour.S, lum);
             for (int i = 0; i < numLEDs; i++) {
