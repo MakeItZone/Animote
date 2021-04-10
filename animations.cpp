@@ -82,6 +82,64 @@ std::unique_ptr<AnimationFunction_t> exampleAnimationFactory() {
     return aup; 
 }
 
+// Wall 1 - set the colours
+std::unique_ptr<AnimationFunction_t> wallSteadyColorsAnimationFactory(const int startLED, const int numLEDs) {
+    auto al = [startLED, numLEDs] (const AnimationParam& param) -> void {
+        switch (param.state)
+        {
+        case AnimationState_Started:
+        {
+            const palette_t &palette = nightColours;
+            strip.SetPixelColor(startLED,   palette.at("brown")); 
+            strip.SetPixelColor(startLED+1, palette.at("brown")); 
+            strip.SetPixelColor(startLED+2, palette.at("grey")); 
+            strip.SetPixelColor(startLED+3, palette.at("grey")); 
+            strip.SetPixelColor(startLED+4, palette.at("blue")); 
+            strip.SetPixelColor(startLED+5, palette.at("orange")); 
+            strip.SetPixelColor(startLED+6, palette.at("violet")); 
+            strip.SetPixelColor(startLED+7, palette.at("yellow")); 
+            strip.SetPixelColor(startLED+8, palette.at("black")); 
+            strip.SetPixelColor(startLED+9, palette.at("black")); 
+            strip.SetPixelColor(startLED+10, palette.at("white")); 
+            strip.SetPixelColor(startLED+11, palette.at("green")); 
+            strip.SetPixelColor(startLED+12, palette.at("green")); 
+            strip.SetPixelColor(startLED+13, palette.at("red")); 
+            strip.SetPixelColor(startLED+14, palette.at("red")); 
+
+            break;
+        }
+        case AnimationState_Progress:
+        {
+            for (int i = startLED; i<startLED+numLEDs; i++) {
+                if(param.progress <0.9) {
+                    HslColor color = strip.GetPixelColor(i);
+                    HslColor newColor = HslColor(color.H, color.S, 0.4f);
+                    strip.SetPixelColor(i, newColor);
+                } else {
+                    HslColor color = strip.GetPixelColor(i);
+                    HslColor newColor = HslColor(color.H, color.S, 0);
+                    strip.SetPixelColor(i, newColor);
+                }
+            }
+            break;
+        }
+        case AnimationState_Completed:
+        {   // restart animation so it continues!
+            neoAnimator.RestartAnimation(param.index);
+            break;
+        }
+        default:
+            // getting here would be an error state
+            break;
+        }
+    };
+
+    auto af = new std::function<void (const AnimationParam& param)>(al);
+    auto aup = std::unique_ptr<AnimationFunction_t>(af);
+    return aup; 
+}
+
+
 // animation function generator that creates a solid colour
 std::unique_ptr<AnimationFunction_t> solidColourAnimationFactory(const HslColor &colour, const int startLED, const int numLEDs) {
     auto al = [colour, startLED, numLEDs] (const AnimationParam& param) -> void {
@@ -244,13 +302,7 @@ int decodePaletteAndColour(const string& paletteName, const string& colourName, 
     return 0;
 }
 
-std::size_t parseStdParams(const string &animationName, string &function, string &colourName, string &paletteName, HslColor &colour, palette_t *&palette){
-    std::size_t next;
-    next = findChunk(animationName, 0, function);
-    if (string::npos == next) {
-        return string::npos;
-    }
-    
+std::size_t parseStdParams(const string &animationName, std::size_t next, string &colourName, string &paletteName, HslColor &colour, palette_t *&palette){
     next = findChunk(animationName, next, paletteName);
     if (string::npos == next) {
         return string::npos;
@@ -260,7 +312,7 @@ std::size_t parseStdParams(const string &animationName, string &function, string
     if (string::npos == next) {
         return string::npos;
     }
-
+    
     int result = decodePaletteAndColour(paletteName, colourName, palette, colour);
     if (-1 == result) {
         return string::npos;
@@ -283,21 +335,38 @@ std::size_t parseStdParams(const string &animationName, string &function, string
 int createAnimation(const string& animationName, const int startLED, const int numLEDs, AnimationChannelControllerDescriptor &matrix) {
     matrix.animationName=std::move(std::unique_ptr<string>(new string(animationName)));
 
-    if ("blank" == animationName) {
+    std::size_t next;
+    string function;
+    next = findChunk(animationName, 0, function);
+    if (string::npos == next) {
+        return string::npos;
+    }
+
+    if ("blank" == function) {
         matrix.controller=solidColourAnimationFactory(HslColor(0,0,0), startLED, numLEDs);
         matrix.duration = UINT16_MAX;
         return 0;
     }
 
+    if ("wallsteady" == function) {
+        int speed;
+        next = parseNumber(animationName, next, speed);
+        if (string::npos == next) {
+            return -1;
+        }
+        matrix.controller= wallSteadyColorsAnimationFactory(startLED, numLEDs);
+        matrix.duration = speed;
+        return 0;
+
+    }
+
     // standard params are function-palette-colour-speed
-    std::size_t next;
-    string function;
     HslColor baseColour;
     string colourName;
     string paletteName;
     const palette_t* palette;
 
-    next = parseStdParams(animationName, function, colourName, paletteName, baseColour, palette);
+    next = parseStdParams(animationName, next, colourName, paletteName, baseColour, palette);
     if (string::npos == next) {
         return -1;
     }
